@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"F:\\\\Coding\\\\Go\\\\toOffer\\\\Forum\" -Recurse -Force)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(go mod *)",
+      "Bash(go get *)"
+    ]
+  }
+}
