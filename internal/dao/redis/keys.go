@@ -2,9 +2,17 @@ package redis
 
 const (
 	Prefix             = "forum:"
-	KeyPostTimeZSet    = Prefix + "post:time"   // zset: 帖子发帖时间
-	KeyPostScoreZSet   = Prefix + "post:score"  // zset: 帖子分数
-	KeyPostVotedPrefix = Prefix + "post:voted:" // set: 记录用户投票类型;参数是post_id
+	KeyPostTimeZSet    = Prefix + "post:time"
+	KeyPostScoreZSet   = Prefix + "post:score"
+	KeyPostVotedPrefix = Prefix + "post:voted:" // zset per post: member=userID, score=±1
+
+	// Vote counts (hash per post/comment for fast batch reads)
+	KeyPostVoteHash    = Prefix + "post:votes:"    // hash: {up, down}
+	KeyCommentVotedPrefix = Prefix + "comment:voted:" // zset per comment
+	KeyCommentVoteHash = Prefix + "comment:votes:"   // hash: {up, down}
+
+	// Comment count per post
+	KeyPostCommentCount = Prefix + "post:comment_count:"
 )
 
 func getRedisKey(key string) string {

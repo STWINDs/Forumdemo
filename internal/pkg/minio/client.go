@@ -12,6 +12,10 @@ import (
 
 var client *minio.Client
 
+func SetClient(c *minio.Client) {
+	client = c
+}
+
 func Init(cfg *config.MinioConfig) error {
 	var err error
 	client, err = minio.New(cfg.Endpoint, &minio.Options{

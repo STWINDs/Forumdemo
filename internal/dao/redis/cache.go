@@ -11,6 +11,7 @@ import (
 )
 
 var (
+	l1Ready bool
 	l1Cache otter.Cache[string, string]
 	cb      *gobreaker.CircuitBreaker
 	sf      singleflight.Group
@@ -28,6 +29,7 @@ func initResilience() {
 		panic(err)
 	}
 	l1Cache = cache
+	l1Ready = true
 
 	// 2. 初始化熔断器
 	cb = gobreaker.NewCircuitBreaker(gobreaker.Settings{
@@ -44,17 +46,32 @@ func initResilience() {
 
 // GetWithResilience 实现多级缓存读取逻辑
 // 链路：L1 -> Singleflight -> Circuit Breaker -> L2 (Redis) -> DB Fallback
+// Redis 不可用时直接降级到 DB，不 panic
 func GetWithResilience(ctx context.Context, key string, target interface{}, ttl time.Duration, dbFetch func() (interface{}, error)) error {
+	// 如果 Redis 未初始化，直接走 DB 降级
+	if rdb == nil || cb == nil {
+		dbVal, err := dbFetch()
+		if err != nil {
+			return err
+		}
+		b, _ := json.Marshal(dbVal)
+		return json.Unmarshal(b, target)
+	}
+
 	// 1. 尝试从 L1 读取
-	if val, ok := l1Cache.Get(key); ok {
-		return json.Unmarshal([]byte(val), target)
+	if l1Ready {
+		if val, ok := l1Cache.Get(key); ok {
+			return json.Unmarshal([]byte(val), target)
+		}
 	}
 
 	// 2. 使用 Singleflight 合并并发请求，防止缓存击穿
 	v, err, _ := sf.Do(key, func() (interface{}, error) {
 		// 3. 再次检查 L1 (双重检查)
-		if val, ok := l1Cache.Get(key); ok {
-			return val, nil
+		if l1Ready {
+			if val, ok := l1Cache.Get(key); ok {
+				return val, nil
+			}
 		}
 
 		// 4. 尝试从 L2 (Redis) 读取，受熔断器保护
@@ -67,7 +84,9 @@ func GetWithResilience(ctx context.Context, key string, target interface{}, ttl 
 
 		// 如果 Redis 命中
 		if err == nil {
-			l1Cache.Set(key, redisVal)
+			if l1Ready {
+				l1Cache.Set(key, redisVal)
+			}
 			return redisVal, nil
 		}
 
@@ -89,7 +108,9 @@ func GetWithResilience(ctx context.Context, key string, target interface{}, ttl 
 		}()
 
 		// 写入 L1
-		l1Cache.Set(key, s)
+		if l1Ready {
+			l1Cache.Set(key, s)
+		}
 		return s, nil
 	})
 

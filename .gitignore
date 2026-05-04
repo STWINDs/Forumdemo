@@ -1,2 +1,9 @@
 *.yaml
 docker-compose.yml
+./.claude/
+*.txt
+./docs/*
+*.exe
+*.exe~
+logs/
+plan.md

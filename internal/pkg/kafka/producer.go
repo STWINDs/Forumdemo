@@ -11,12 +11,24 @@ import (
 
 var writer *kafka.Writer
 
+func SetWriter(w *kafka.Writer) {
+	writer = w
+}
+
 func Init(cfg *config.KafkaConfig) {
+	if cfg == nil || cfg.Address == "" {
+		zap.L().Warn("kafka address not configured, event publishing disabled")
+		return
+	}
 	writer = &kafka.Writer{
 		Addr:     kafka.TCP(cfg.Address),
 		Topic:    cfg.Topic,
 		Balancer: &kafka.LeastBytes{},
 	}
+}
+
+func IsReady() bool {
+	return writer != nil
 }
 
 func SendEvent(ctx context.Context, key string, value interface{}) error {
@@ -39,6 +51,11 @@ func SendEvent(ctx context.Context, key string, value interface{}) error {
 		})
 	}
 
+	if writer == nil {
+		zap.L().Error("kafka writer is nil, skip sending")
+		return nil
+	}
+
 	err = writer.WriteMessages(ctx, msg)
 	if err != nil {
 		zap.L().Error("kafka.WriteMessages failed", zap.Error(err))
@@ -47,6 +64,7 @@ func SendEvent(ctx context.Context, key string, value interface{}) error {
 }
 
 func Close() {
+	StopAsyncProducer()
 	if writer != nil {
 		_ = writer.Close()
 	}

@@ -1,0 +1,553 @@
+/* ================================================================
+   Nothing Design System — Forum
+   Dark mode default. Light via prefers-color-scheme.
+   ================================================================ */
+
+/* ---- Design Tokens ---- */
+:root {
+  /* Dark mode (default) */
+  --black:            #000000;
+  --surface:          #111111;
+  --surface-raised:   #1A1A1A;
+  --border:           #222222;
+  --border-visible:   #333333;
+  --text-disabled:    #666666;
+  --text-secondary:   #999999;
+  --text-primary:     #E8E8E8;
+  --text-display:     #FFFFFF;
+  --accent:           #D71921;
+  --accent-subtle:    rgba(215,25,33,0.15);
+  --success:          #4A9E5C;
+  --warning:          #D4A843;
+  --interactive:      #5B9BF6;
+
+  /* Spacing scale (8px base) */
+  --space-xs:   4px;
+  --space-sm:   8px;
+  --space-md:  16px;
+  --space-lg:  24px;
+  --space-xl:  32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+
+  /* Easing */
+  --ease-out: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+/* ---- Light mode ---- */
+@media (prefers-color-scheme: light) {
+  :root {
+    --black:            #F5F5F5;
+    --surface:          #FFFFFF;
+    --surface-raised:   #F0F0F0;
+    --border:           #E8E8E8;
+    --border-visible:   #CCCCCC;
+    --text-disabled:    #999999;
+    --text-secondary:   #666666;
+    --text-primary:     #1A1A1A;
+    --text-display:     #000000;
+    --interactive:      #007AFF;
+  }
+}
+
+/* ---- Reset ---- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 16px; }
+
+body {
+  font-family: "Space Grotesk", "DM Sans", system-ui, sans-serif;
+  font-weight: 400;
+  color: var(--text-primary);
+  background: var(--black);
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--space-xl) var(--space-md) var(--space-4xl);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Typography ---- */
+h1, h2, h3, h4 {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 500;
+  color: var(--text-display);
+}
+h1 { font-size: 36px; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: var(--space-xl); }
+h2 { font-size: 24px; line-height: 1.2; letter-spacing: -0.01em; margin: var(--space-xl) 0 var(--space-md); }
+h3 { font-size: 18px; line-height: 1.3; margin: var(--space-lg) 0 var(--space-sm); }
+
+a {
+  color: var(--interactive);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+/* ---- Header / Navigation ---- */
+#header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-md);
+  margin-bottom: var(--space-2xl);
+}
+
+#header nav {
+  display: flex;
+  gap: var(--space-lg);
+  font-family: "Space Mono", "JetBrains Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+#header nav a {
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: color 200ms var(--ease-out);
+}
+#header nav a:hover { color: var(--text-display); text-decoration: none; }
+#header nav a.active { color: var(--text-display); }
+#header nav span { color: var(--text-disabled); }
+
+/* ---- Tables (post list) ---- */
+#main table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: var(--space-lg) 0;
+}
+
+#main table th {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border-visible);
+}
+
+#main table td {
+  padding: 12px var(--space-md);
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+#main table td:last-child,
+#main table th:last-child {
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+/* ---- Forms ---- */
+#main form {
+  max-width: 480px;
+}
+
+#main form label {
+  display: block;
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: var(--space-lg) 0 var(--space-xs);
+}
+
+#main form input[type="text"],
+#main form input[type="password"],
+#main form input[type="email"],
+#main form input[type="number"],
+#main form input[type="file"],
+#main form textarea,
+#main form select {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-visible);
+  padding: var(--space-sm) 0;
+  font-family: "Space Mono", monospace;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 200ms var(--ease-out);
+}
+
+#main form textarea {
+  min-height: 120px;
+  resize: vertical;
+  font-family: "Space Grotesk", sans-serif;
+}
+
+#main form input:focus,
+#main form textarea:focus,
+#main form select:focus {
+  border-bottom-color: var(--text-primary);
+}
+
+#main form input[type="file"] {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  padding: var(--space-sm) 0;
+  cursor: pointer;
+}
+#main form input[type="file"]::file-selector-button {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+  padding: var(--space-xs) var(--space-md);
+  margin-right: var(--space-md);
+  cursor: pointer;
+  border-radius: 999px;
+}
+
+/* ---- Buttons ---- */
+#main button {
+  font-family: "Space Mono", monospace;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 12px 24px;
+  min-height: 44px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-primary);
+  border-radius: 999px;
+  margin: var(--space-md) var(--space-sm) 0 0;
+  transition: border-color 200ms var(--ease-out), color 200ms var(--ease-out);
+}
+
+#main button:hover {
+  border-color: var(--text-primary);
+  color: var(--text-display);
+}
+
+/* Vote action buttons */
+#main .vote-group button {
+  min-width: 100px;
+}
+
+/* ---- Messages ---- */
+.error-msg {
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  color: var(--accent);
+  margin-top: var(--space-sm);
+}
+
+.success-msg {
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  color: var(--success);
+  margin-top: var(--space-sm);
+}
+
+.info-msg {
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  margin: var(--space-md) 0;
+}
+
+/* ---- Comments ---- */
+.comment-item {
+  border-left: 1px solid var(--border-visible);
+  padding: var(--space-sm) 0 var(--space-sm) var(--space-lg);
+  margin: var(--space-sm) 0;
+}
+
+.comment-meta {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.comment-item a {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-right: var(--space-sm);
+}
+.comment-item a:hover { color: var(--text-display); text-decoration: none; }
+
+/* ---- Pagination ---- */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-top: var(--space-lg);
+}
+
+.pagination a {
+  color: var(--text-primary);
+  border: 1px solid var(--border-visible);
+  border-radius: 999px;
+  padding: var(--space-xs) var(--space-md);
+  font-size: 11px;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+.pagination a:hover {
+  border-color: var(--text-primary);
+  color: var(--text-display);
+}
+
+/* ---- Post detail ---- */
+#main .post-meta {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-lg);
+}
+
+/* ---- Dot-matrix motif (empty states) ---- */
+.empty-state {
+  padding: var(--space-4xl) 0;
+  text-align: center;
+  background-image: radial-gradient(circle, var(--border-visible) 1px, transparent 1px);
+  background-size: 16px 16px;
+  margin: var(--space-2xl) 0;
+}
+
+.empty-state p {
+  font-family: "Space Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  display: inline;
+  background: var(--black);
+  padding: 0 var(--space-md);
+}
+
+/* ---- Loading ---- */
+.loading {
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  padding: var(--space-3xl) 0;
+}
+
+/* ---- Vote Buttons (2-button toggle) ---- */
+#main .vote-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0;
+}
+
+#main .vote-group button {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  min-height: 32px;
+  min-width: 56px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  transition: all 250ms var(--ease-out);
+}
+
+#main .vote-group button:hover {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+#main .vote-group button.active-up {
+  background: var(--success);
+  border-color: var(--success);
+  color: #000;
+}
+
+#main .vote-group button.active-down {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+#main .vote-count {
+  font-family: "Space Mono", monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin: 0 var(--space-xs);
+  min-width: 36px;
+  text-align: center;
+}
+
+/* ---- Sort Toggle ---- */
+.sort-toggle {
+  float: right;
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.sort-toggle a {
+  color: var(--text-disabled);
+  text-transform: uppercase;
+  text-decoration: none;
+  margin-left: var(--space-md);
+}
+
+.sort-toggle a.active {
+  color: var(--text-display);
+}
+
+.sort-toggle a:hover {
+  color: var(--text-primary);
+}
+
+.sort-toggle span {
+  color: var(--border-visible);
+  margin: 0 var(--space-xs);
+}
+
+/* ---- Post Cards (homepage) ---- */
+#main .post-card {
+  border: 1px solid var(--border);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+#main .post-card h3 {
+  font-size: 20px;
+  margin: 0 0 var(--space-xs) 0;
+}
+
+#main .post-card .card-meta {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+#main .post-card .card-preview {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-xs);
+  line-height: 1.4;
+}
+
+#main .post-card .card-expand {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+#main .post-card .card-expand:hover {
+  color: var(--text-primary);
+}
+
+#main .post-card .card-stats {
+  display: flex;
+  gap: var(--space-lg);
+  margin: var(--space-sm) 0;
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+#main .post-card .card-top-comment {
+  border-left: 2px solid var(--border-visible);
+  padding: var(--space-xs) 0 var(--space-xs) var(--space-md);
+  margin-top: var(--space-sm);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+#main .post-card .card-top-comment .tc-author {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  margin-top: var(--space-xs);
+}
+
+#main .post-card video {
+  max-width: 100%;
+  max-height: 360px;
+  margin: var(--space-sm) 0;
+  background: var(--black);
+}
+
+#main .post-card .card-link {
+  font-family: "Space Mono", monospace;
+  font-size: 12px;
+  color: var(--interactive);
+  word-break: break-all;
+}
+
+/* ---- Post Type Segmented Control ---- */
+#main .type-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: var(--space-md);
+}
+
+#main .type-toggle button {
+  font-family: "Space Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 20px;
+  background: transparent;
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-radius: 0;
+  margin: 0;
+}
+
+#main .type-toggle button:first-child {
+  border-radius: 999px 0 0 999px;
+}
+
+#main .type-toggle button:last-child {
+  border-radius: 0 999px 999px 0;
+}
+
+#main .type-toggle button.active {
+  background: var(--text-display);
+  color: var(--black);
+  border-color: var(--text-display);
+}

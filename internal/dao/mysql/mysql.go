@@ -10,6 +10,10 @@ import (
 
 var db *sqlx.DB
 
+func SetDB(db_ *sqlx.DB) {
+	db = db_
+}
+
 func Init(cfg *config.MySQLConfig) (err error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?parseTime=true&loc=Local",
 		cfg.User,
@@ -28,6 +32,15 @@ func Init(cfg *config.MySQLConfig) (err error) {
 	return
 }
 
+func isReady() error {
+	if db == nil {
+		return ErrDBNotReady
+	}
+	return nil
+}
+
 func Close() {
-	_ = db.Close()
+	if db != nil {
+		_ = db.Close()
+	}
 }

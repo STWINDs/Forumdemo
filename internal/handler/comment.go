@@ -29,13 +29,20 @@ func CreateCommentHandler(c *gin.Context) {
 }
 
 func GetCommentListHandler(c *gin.Context) {
-	postIDStr := c.Param("post_id")
-	postID, err := strconv.ParseInt(postIDStr, 10, 64)
+	postID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"msg": "invalid post id"})
 		return
 	}
-	comments, err := service.GetCommentsByPostID(postID)
+
+	sort := c.DefaultQuery("sort", "hot") // "hot" or "new"
+
+	var uid int64
+	if u, ok := c.Get(middleware.ContextUserIDKey); ok {
+		uid = u.(int64)
+	}
+
+	comments, err := service.GetCommentsWithVotes(postID, sort, uid)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
 		return

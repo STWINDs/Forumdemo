@@ -28,34 +28,36 @@ func main() {
 
 	// 3. Init MySQL
 	if err := mysql.Init(config.Conf.MySQL); err != nil {
-		fmt.Printf("init mysql failed, err:%v\n", err)
-		return
+		zap.L().Warn("mysql init failed, API will fallback to errors", zap.Error(err))
+	} else {
+		defer mysql.Close()
 	}
-	defer mysql.Close()
 
 	// 4. Init Redis
 	if err := redis.Init(config.Conf.Redis); err != nil {
-		fmt.Printf("init redis failed, err:%v\n", err)
-		return
+		zap.L().Warn("redis init failed, cache disabled", zap.Error(err))
+	} else {
+		defer redis.Close()
 	}
-	defer redis.Close()
 
 	// 5. Init Minio
 	if err := minio.Init(config.Conf.Minio); err != nil {
-		fmt.Printf("init minio failed, err:%v\n", err)
-		return
+		zap.L().Warn("minio init failed, video upload disabled", zap.Error(err))
 	}
 
-	// 6. Init Kafka
+	// 6. Init Kafka + Async Producer + Reconciler
 	kafka.Init(config.Conf.Kafka)
 	kafka.InitConsumer(config.Conf.Kafka)
 	kafka.InitCanalConsumer(config.Conf.Kafka)
+	kafka.InitAsyncProducer()
+	kafka.StartVoteReconciliationLoop()
 	defer kafka.Close()
 
-	// 6. Register routes
+	// 7. Register routes (serves frontend + API)
 	r := router.Setup(config.Conf.App.Mode)
 
-	// 6. Start server
+	// 8. Start server
+	zap.L().Info("Starting server", zap.Int("port", config.Conf.App.Port))
 	err := r.Run(fmt.Sprintf(":%d", config.Conf.App.Port))
 	if err != nil {
 		fmt.Printf("run server failed, err:%v\n", err)

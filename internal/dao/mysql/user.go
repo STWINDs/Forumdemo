@@ -9,6 +9,7 @@ import (
 const secret = "forum"
 
 func CheckUserExist(username string) (err error) {
+	if err = isReady(); err != nil { return }
 	sqlStr := `select count(id) from users where username = ?`
 	var count int
 	if err := db.Get(&count, sqlStr, username); err != nil {
@@ -21,6 +22,7 @@ func CheckUserExist(username string) (err error) {
 }
 
 func InsertUser(user *model.User) (err error) {
+	if err = isReady(); err != nil { return }
 	user.Password = encryptPassword(user.Password)
 	sqlStr := `insert into users(username, password, email) values(?,?,?)`
 	_, err = db.Exec(sqlStr, user.Username, user.Password, user.Email)
@@ -30,10 +32,12 @@ func InsertUser(user *model.User) (err error) {
 func encryptPassword(oPassword string) string {
 	h := md5.New()
 	h.Write([]byte(secret))
-	return hex.EncodeToString(h.Sum([]byte(oPassword)))
+	h.Write([]byte(oPassword))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func Login(user *model.User) (err error) {
+	if err = isReady(); err != nil { return }
 	oPassword := user.Password
 	sqlStr := `select id, username, password from users where username = ?`
 	err = db.Get(user, sqlStr, user.Username)
