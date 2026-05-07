@@ -33,6 +33,8 @@ COPY --from=builder /app/forum-app .
 # Copy config files
 COPY --from=builder /app/config/config.yaml ./config/
 
+COPY --from=builder /app/web ./web
+
 # Export port 8080
 EXPOSE 8080
 
