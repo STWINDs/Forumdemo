@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -18,10 +19,23 @@ func validRuntimeConfig() *Config {
 	}
 }
 
-func TestConfigYAMLContainsPerformanceSettings(t *testing.T) {
+func TestConfigYAMLParsesPerformanceSettings(t *testing.T) {
+	// Runtime config.yaml is gitignored and may contain deployment credentials.
+	const fixture = `
+rate_limit:
+  enabled: true
+  burst: 200
+  rps: 100
+direct_message_outbox:
+  batch_size: 100
+  poll_interval: 1s
+  retry_delay: 1m
+  lease_timeout: 1m
+  workers: 1
+`
 	reader := viper.New()
-	reader.SetConfigFile("config.yaml")
-	require.NoError(t, reader.ReadInConfig())
+	reader.SetConfigType("yaml")
+	require.NoError(t, reader.ReadConfig(strings.NewReader(fixture)))
 	var cfg Config
 	require.NoError(t, reader.Unmarshal(&cfg))
 	require.NoError(t, validateRuntimeConfig(&cfg))
