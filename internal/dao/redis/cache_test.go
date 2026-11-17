@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -67,4 +67,17 @@ func TestGetWithResilience(t *testing.T) {
 	err = GetWithResilience(ctx, keyErr, &res, time.Minute, dbFetchErr)
 	assert.NotNil(t, err)
 	assert.Equal(t, "db error", err.Error())
+}
+
+func TestL1CacheExpiresEntries(t *testing.T) {
+	cache, err := buildL1Cache(10 * time.Millisecond)
+	assert.NoError(t, err)
+	assert.True(t, cache.Set("expiring", "value"))
+	_, found := cache.Get("expiring")
+	assert.True(t, found)
+
+	assert.Eventually(t, func() bool {
+		_, found := cache.Get("expiring")
+		return !found
+	}, time.Second, 10*time.Millisecond)
 }

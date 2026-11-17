@@ -3,13 +3,16 @@ package redis
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/your-username/forum/config"
+	"strings"
 )
 
-var rdb *redis.Client
+// UniversalClient lets production use Redis Cluster while unit tests keep
+// injecting a lightweight standalone/miniredis client.
+var rdb redis.UniversalClient
 
-func SetRDB(rdb_ *redis.Client) {
+func SetRDB(rdb_ redis.UniversalClient) {
 	rdb = rdb_
 }
 
@@ -18,12 +21,31 @@ func InitResilienceForTest() {
 }
 
 func Init(cfg *config.RedisConfig) (err error) {
-	rdb = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-		Password: cfg.Password,
-		DB:       cfg.DB,
-		PoolSize: cfg.PoolSize,
-	})
+	if cfg == nil {
+		return fmt.Errorf("redis config is nil")
+	}
+
+	mode := strings.ToLower(strings.TrimSpace(cfg.Mode))
+	if mode == "cluster" || len(cfg.Addrs) > 0 {
+		if cfg.DB != 0 {
+			return fmt.Errorf("redis cluster only supports db 0, got %d", cfg.DB)
+		}
+		if len(cfg.Addrs) == 0 {
+			return fmt.Errorf("redis cluster addrs must not be empty")
+		}
+		rdb = redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:    cfg.Addrs,
+			Password: cfg.Password,
+			PoolSize: cfg.PoolSize,
+		})
+	} else {
+		rdb = redis.NewClient(&redis.Options{
+			Addr:     fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+			Password: cfg.Password,
+			DB:       cfg.DB,
+			PoolSize: cfg.PoolSize,
+		})
+	}
 
 	_, err = rdb.Ping(context.Background()).Result()
 	if err == nil {
@@ -42,11 +64,15 @@ func isReady() error {
 }
 
 func Close() {
-	_ = rdb.Close()
+	if rdb != nil {
+		_ = rdb.Close()
+	}
 }
 
 func DeleteCache(key string) error {
-	if err := isReady(); err != nil { return err }
+	if err := isReady(); err != nil {
+		return err
+	}
 	return rdb.Del(context.Background(), key).Err()
 }
 

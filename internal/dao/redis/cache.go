@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/maypok86/otter"
+	redisv9 "github.com/redis/go-redis/v9"
 	"github.com/sony/gobreaker"
+	"github.com/your-username/forum/internal/pkg/metrics"
 	"golang.org/x/sync/singleflight"
 	"time"
 )
@@ -19,12 +21,7 @@ var (
 
 func initResilience() {
 	// 1. 初始化 L1 本地缓存 (容量 10000, TTL 1分钟)
-	cache, err := otter.MustBuilder[string, string](10_000).
-		CollectStats().
-		Cost(func(key string, value string) uint32 {
-			return 1
-		}).
-		Build()
+	cache, err := buildL1Cache(time.Minute)
 	if err != nil {
 		panic(err)
 	}
@@ -44,12 +41,21 @@ func initResilience() {
 	})
 }
 
+func buildL1Cache(ttl time.Duration) (otter.Cache[string, string], error) {
+	return otter.MustBuilder[string, string](10_000).
+		WithTTL(ttl).
+		CollectStats().
+		Cost(func(key string, value string) uint32 { return 1 }).
+		Build()
+}
+
 // GetWithResilience 实现多级缓存读取逻辑
 // 链路：L1 -> Singleflight -> Circuit Breaker -> L2 (Redis) -> DB Fallback
 // Redis 不可用时直接降级到 DB，不 panic
 func GetWithResilience(ctx context.Context, key string, target interface{}, ttl time.Duration, dbFetch func() (interface{}, error)) error {
 	// 如果 Redis 未初始化，直接走 DB 降级
 	if rdb == nil || cb == nil {
+		metrics.IncCache("db_fallback")
 		dbVal, err := dbFetch()
 		if err != nil {
 			return err
@@ -61,15 +67,18 @@ func GetWithResilience(ctx context.Context, key string, target interface{}, ttl 
 	// 1. 尝试从 L1 读取
 	if l1Ready {
 		if val, ok := l1Cache.Get(key); ok {
+			metrics.IncCache("l1_hit")
 			return json.Unmarshal([]byte(val), target)
 		}
+		metrics.IncCache("l1_miss")
 	}
 
 	// 2. 使用 Singleflight 合并并发请求，防止缓存击穿
-	v, err, _ := sf.Do(key, func() (interface{}, error) {
+	v, err, shared := sf.Do(key, func() (interface{}, error) {
 		// 3. 再次检查 L1 (双重检查)
 		if l1Ready {
 			if val, ok := l1Cache.Get(key); ok {
+				metrics.IncCache("l1_hit_after_singleflight")
 				return val, nil
 			}
 		}
@@ -84,13 +93,22 @@ func GetWithResilience(ctx context.Context, key string, target interface{}, ttl 
 
 		// 如果 Redis 命中
 		if err == nil {
+			metrics.IncCache("l2_hit")
 			if l1Ready {
 				l1Cache.Set(key, redisVal)
 			}
 			return redisVal, nil
 		}
+		if errors.Is(err, redisv9.Nil) {
+			metrics.IncCache("l2_miss")
+		} else if errors.Is(err, gobreaker.ErrOpenState) {
+			metrics.IncCache("breaker_open")
+		} else {
+			metrics.IncCache("l2_error")
+		}
 
 		// 5. Redis 未命中或熔断/异常，降级到 DB
+		metrics.IncCache("db_fallback")
 		dbVal, err := dbFetch()
 		if err != nil {
 			return nil, err
@@ -101,11 +119,17 @@ func GetWithResilience(ctx context.Context, key string, target interface{}, ttl 
 		s := string(b)
 
 		// 回写 Redis (同样受熔断保护，但不阻塞主流程)
-		go func() {
-			_, _ = cb.Execute(func() (interface{}, error) {
-				return nil, rdb.Set(context.Background(), key, s, ttl).Err()
+		// 持有发起请求时的依赖，避免异步任务读取随后被替换的全局变量。
+		go func(client redisv9.UniversalClient, breaker *gobreaker.CircuitBreaker) {
+			_, cacheErr := breaker.Execute(func() (interface{}, error) {
+				return nil, client.Set(context.Background(), key, s, ttl).Err()
 			})
-		}()
+			if cacheErr != nil {
+				metrics.IncCache("l2_write_error")
+			} else {
+				metrics.IncCache("l2_write_success")
+			}
+		}(rdb, cb)
 
 		// 写入 L1
 		if l1Ready {
@@ -113,6 +137,9 @@ func GetWithResilience(ctx context.Context, key string, target interface{}, ttl 
 		}
 		return s, nil
 	})
+	if shared {
+		metrics.IncCache("singleflight_shared")
+	}
 
 	if err != nil {
 		return err

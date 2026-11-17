@@ -1,0 +1,85 @@
+name: Verify application
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Static checks and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Static checks
+        run: go vet ./...
+      - name: Unit tests with race detection
+        run: go test -short -race -count=1 -timeout=5m ./...
+
+  integration:
+    name: Middleware integration and comment recovery
+    if: github.event_name != 'pull_request'
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Start isolated dependencies
+        run: docker compose -p forum-ci -f docker/ci/compose.yml up -d --wait --wait-timeout 180
+      - name: Prepare topics and wait for object storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          for topic in canal-binlog canal-binlog-dlq forum-test-events forum-e2e-comments forum-e2e-votes forum-e2e-trace; do
+            docker compose -p forum-ci -f docker/ci/compose.yml exec -T kafka \
+              kafka-topics --bootstrap-server localhost:29092 --create --if-not-exists \
+              --topic "$topic" --partitions 1 --replication-factor 1
+          done
+          curl --fail --silent --show-error --retry 20 --retry-connrefused \
+            --retry-delay 2 --max-time 5 http://localhost:9000/minio/health/ready
+      - name: Run existing integration suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci-results
+          go test -count=1 -timeout=8m -json ./... | tee ci-results/integration.jsonl
+      # 故障注入单独执行，避免 broker 重启干扰其他包正在运行的测试。
+      - name: Verify comment recovery before publishing
+        env:
+          FORUM_CI_RECOVERY: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -count=1 -timeout=5m -json ./internal/pkg/kafka \
+            -run '^TestComment(Recovery|DeadLetter)Integration$' | tee ci-results/comment-recovery.jsonl
+      - name: Collect dependency logs
+        if: always()
+        run: |
+          mkdir -p ci-results
+          docker compose -p forum-ci -f docker/ci/compose.yml logs --no-color > ci-results/dependencies.log 2>&1
+      - name: Save diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ci-results/
+          retention-days: 7
+      - name: Stop isolated dependencies
+        if: always()
+        run: docker compose -p forum-ci -f docker/ci/compose.yml down --volumes --remove-orphans

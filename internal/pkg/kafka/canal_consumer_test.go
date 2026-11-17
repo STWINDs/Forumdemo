@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 
@@ -215,6 +215,9 @@ func TestProcessCanalMessageWithRetry_Exhausted(t *testing.T) {
 
 // TestSendToDLQ verifies DLQ message is sent when processing fails
 func TestSendToDLQ(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	// Setup DLQ writer pointing to real Kafka
 	dlqWriter = &kafka.Writer{
 		Addr:                   kafka.TCP("localhost:29092"),
@@ -234,10 +237,10 @@ func TestSendToDLQ(t *testing.T) {
 
 	// Read back from DLQ to verify
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{"localhost:29092"},
-		Topic:     "canal-binlog-dlq",
-		GroupID:   "dlq-test-group",
-		MaxWait:   10 * time.Second,
+		Brokers: []string{"localhost:29092"},
+		Topic:   "canal-binlog-dlq",
+		GroupID: "dlq-test-group",
+		MaxWait: 10 * time.Second,
 	})
 	defer reader.Close()
 

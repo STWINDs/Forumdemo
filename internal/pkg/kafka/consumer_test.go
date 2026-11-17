@@ -16,6 +16,9 @@ import (
 )
 
 func TestCommentKafkaE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	// 1. Setup sqlmock for MySQL
 	mockDB, mock, err := sqlmock.New()
 	if err != nil {
@@ -54,9 +57,14 @@ func TestCommentKafkaE2E(t *testing.T) {
 	defer reader.Close()
 
 	// 5. Mock the expected MySQL insert from the consumer
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO comment_submissions").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT comment_id FROM comment_submissions").WillReturnRows(sqlmock.NewRows([]string{"comment_id"}).AddRow(nil))
 	mock.ExpectExec("insert into comments").
 		WithArgs(comment.Content, comment.AuthorID, comment.PostID, comment.ParentID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("UPDATE comment_submissions").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	// 6. Read message and process
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -66,13 +74,16 @@ func TestCommentKafkaE2E(t *testing.T) {
 	assert.Nil(t, err)
 
 	// 7. Call processMessage (same as consumer goroutine)
-	processMessage(m)
+	assert.NoError(t, processMessage(m))
 
 	// 8. Verify all sqlmock expectations were met
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestVoteKafkaE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	// 1. Setup sqlmock
 	mockDB, mock, err := sqlmock.New()
 	if err != nil {
@@ -127,6 +138,9 @@ func TestVoteKafkaE2E(t *testing.T) {
 }
 
 func TestProcessMessage_TraceID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	mockDB, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -155,9 +169,14 @@ func TestProcessMessage_TraceID(t *testing.T) {
 	})
 	defer reader.Close()
 
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO comment_submissions").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT comment_id FROM comment_submissions").WillReturnRows(sqlmock.NewRows([]string{"comment_id"}).AddRow(nil))
 	mock.ExpectExec("insert into comments").
 		WithArgs(comment.Content, comment.AuthorID, comment.PostID, comment.ParentID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec("UPDATE comment_submissions").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -175,7 +194,7 @@ func TestProcessMessage_TraceID(t *testing.T) {
 	}
 	_ = hasTraceID // Trace ID is optional — only present when ctx has it
 
-	processMessage(m)
+	assert.NoError(t, processMessage(m))
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 

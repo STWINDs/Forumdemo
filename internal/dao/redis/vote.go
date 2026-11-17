@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 )
 
 /* Toggle voting logic:
@@ -18,21 +18,25 @@ import (
 */
 
 func VoteForPost(userID, postID string, direction float64) (float64, error) {
-	if err := isReady(); err != nil { return 0, err }
+	if err := isReady(); err != nil {
+		return 0, err
+	}
 	ctx := context.Background()
 
-	key := KeyPostVotedPrefix + postID
+	key := PostVotedKey(postID)
 	ov := rdb.ZScore(ctx, key, userID).Val()
-	return toggleVote(ctx, key, KeyPostVoteHash+postID, userID, ov, direction)
+	return toggleVote(ctx, key, PostVoteCountKey(postID), userID, ov, direction)
 }
 
 func VoteForComment(userID, commentID string, direction float64) (float64, error) {
-	if err := isReady(); err != nil { return 0, err }
+	if err := isReady(); err != nil {
+		return 0, err
+	}
 	ctx := context.Background()
 
-	key := KeyCommentVotedPrefix + commentID
+	key := CommentVotedKey(commentID)
 	ov := rdb.ZScore(ctx, key, userID).Val()
-	return toggleVote(ctx, key, KeyCommentVoteHash+commentID, userID, ov, direction)
+	return toggleVote(ctx, key, CommentVoteCountKey(commentID), userID, ov, direction)
 }
 
 func toggleVote(ctx context.Context, votedKey, countKey, userID string, oldVote, direction float64) (float64, error) {
@@ -51,14 +55,14 @@ func toggleVote(ctx context.Context, votedKey, countKey, userID string, oldVote,
 	}
 
 	if oldVote == 0 {
-		pipeline.ZAdd(ctx, votedKey, &redis.Z{Score: direction, Member: userID})
+		pipeline.ZAdd(ctx, votedKey, redis.Z{Score: direction, Member: userID})
 		if direction == 1 {
 			pipeline.HIncrBy(ctx, countKey, "up", 1)
 		} else {
 			pipeline.HIncrBy(ctx, countKey, "down", 1)
 		}
 	} else {
-		pipeline.ZAdd(ctx, votedKey, &redis.Z{Score: direction, Member: userID})
+		pipeline.ZAdd(ctx, votedKey, redis.Z{Score: direction, Member: userID})
 		if direction == 1 {
 			pipeline.HIncrBy(ctx, countKey, "up", 1)
 			pipeline.HIncrBy(ctx, countKey, "down", -1)
@@ -77,9 +81,11 @@ func toggleVote(ctx context.Context, votedKey, countKey, userID string, oldVote,
 
 // GetPostVoteCounts returns {up, down} from hash
 func GetPostVoteCounts(postID string) (up, down int64, err error) {
-	if err = isReady(); err != nil { return 0, 0, err }
+	if err = isReady(); err != nil {
+		return 0, 0, err
+	}
 	ctx := context.Background()
-	results, err := rdb.HMGet(ctx, KeyPostVoteHash+postID, "up", "down").Result()
+	results, err := rdb.HMGet(ctx, PostVoteCountKey(postID), "up", "down").Result()
 	if err != nil {
 		return 0, 0, err
 	}
@@ -94,15 +100,19 @@ func GetPostVoteCounts(postID string) (up, down int64, err error) {
 
 // GetUserPostVote returns the user's vote on a post: 1, -1, or 0
 func GetUserPostVote(userID, postID string) (float64, error) {
-	if err := isReady(); err != nil { return 0, err }
+	if err := isReady(); err != nil {
+		return 0, err
+	}
 	ctx := context.Background()
-	return rdb.ZScore(ctx, KeyPostVotedPrefix+postID, userID).Val(), nil
+	return rdb.ZScore(ctx, PostVotedKey(postID), userID).Val(), nil
 }
 
 // GetCommentVoteCounts batch-fetches vote counts for multiple comments
 // Returns map[commentID] → {up, down}
 func GetCommentVoteCounts(commentIDs []string) (map[string][]int64, error) {
-	if err := isReady(); err != nil { return nil, err }
+	if err := isReady(); err != nil {
+		return nil, err
+	}
 	if len(commentIDs) == 0 {
 		return map[string][]int64{}, nil
 	}
@@ -110,7 +120,7 @@ func GetCommentVoteCounts(commentIDs []string) (map[string][]int64, error) {
 	ctx := context.Background()
 	pipeline := rdb.Pipeline()
 	for _, cid := range commentIDs {
-		pipeline.HMGet(ctx, KeyCommentVoteHash+cid, "up", "down")
+		pipeline.HMGet(ctx, CommentVoteCountKey(cid), "up", "down")
 	}
 	cmds, err := pipeline.Exec(ctx)
 	if err != nil && err != redis.Nil {
@@ -134,7 +144,9 @@ func GetCommentVoteCounts(commentIDs []string) (map[string][]int64, error) {
 
 // GetUserCommentVotes batch-fetches the current user's vote on multiple comments
 func GetUserCommentVotes(userID string, commentIDs []string) (map[string]float64, error) {
-	if err := isReady(); err != nil { return nil, err }
+	if err := isReady(); err != nil {
+		return nil, err
+	}
 	if len(commentIDs) == 0 {
 		return map[string]float64{}, nil
 	}
@@ -142,7 +154,7 @@ func GetUserCommentVotes(userID string, commentIDs []string) (map[string]float64
 	ctx := context.Background()
 	pipeline := rdb.Pipeline()
 	for _, cid := range commentIDs {
-		pipeline.ZScore(ctx, KeyCommentVotedPrefix+cid, userID)
+		pipeline.ZScore(ctx, CommentVotedKey(cid), userID)
 	}
 	cmds, err := pipeline.Exec(ctx)
 	if err != nil && err != redis.Nil {
@@ -159,7 +171,9 @@ func GetUserCommentVotes(userID string, commentIDs []string) (map[string]float64
 
 // PipelineGetPostVoteCounts batch-fetches up/down counts for multiple posts
 func PipelineGetPostVoteCounts(postIDs []int64) (map[int64][]int64, error) {
-	if err := isReady(); err != nil { return nil, err }
+	if err := isReady(); err != nil {
+		return nil, err
+	}
 	if len(postIDs) == 0 {
 		return map[int64][]int64{}, nil
 	}
@@ -167,7 +181,7 @@ func PipelineGetPostVoteCounts(postIDs []int64) (map[int64][]int64, error) {
 	ctx := context.Background()
 	pipeline := rdb.Pipeline()
 	for _, pid := range postIDs {
-		pipeline.HMGet(ctx, KeyPostVoteHash+strconv.FormatInt(pid, 10), "up", "down")
+		pipeline.HMGet(ctx, PostVoteCountKey(strconv.FormatInt(pid, 10)), "up", "down")
 	}
 	cmds, err := pipeline.Exec(ctx)
 	if err != nil && err != redis.Nil {
@@ -191,22 +205,32 @@ func PipelineGetPostVoteCounts(postIDs []int64) (map[int64][]int64, error) {
 
 // InitPostVoteCounts seeds up/down hash for a newly created post
 func InitPostVoteCounts(postID int64) error {
-	if err := isReady(); err != nil { return err }
+	if err := isReady(); err != nil {
+		return err
+	}
 	ctx := context.Background()
-	return rdb.HMSet(ctx, KeyPostVoteHash+strconv.FormatInt(postID, 10),
+	return rdb.HMSet(ctx, PostVoteCountKey(strconv.FormatInt(postID, 10)),
 		"up", 0, "down", 0).Err()
 }
 
 // CreatePost seeds the post into time/score zsets and initializes vote counts
 func CreatePost(postID int64) error {
-	if err := isReady(); err != nil { return err }
+	if err := isReady(); err != nil {
+		return err
+	}
 	ctx := context.Background()
-	pipeline := rdb.TxPipeline()
 	now := float64(time.Now().Unix())
 	pidStr := strconv.FormatInt(postID, 10)
-	pipeline.ZAdd(ctx, KeyPostTimeZSet, &redis.Z{Score: now, Member: pidStr})
-	pipeline.ZAdd(ctx, KeyPostScoreZSet, &redis.Z{Score: now, Member: pidStr})
-	pipeline.HMSet(ctx, KeyPostVoteHash+pidStr, "up", 0, "down", 0)
-	_, err := pipeline.Exec(ctx)
+
+	// The per-post vote hash belongs to the post slot. Initialize it before
+	// publishing the post into the separate global-index slot.
+	if err := rdb.HMSet(ctx, PostVoteCountKey(pidStr), "up", 0, "down", 0).Err(); err != nil {
+		return err
+	}
+	_, err := rdb.TxPipelined(ctx, func(p redis.Pipeliner) error {
+		p.ZAdd(ctx, KeyPostTimeZSet, redis.Z{Score: now, Member: pidStr})
+		p.ZAdd(ctx, KeyPostScoreZSet, redis.Z{Score: now, Member: pidStr})
+		return nil
+	})
 	return err
 }

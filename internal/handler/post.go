@@ -5,6 +5,8 @@ import (
 	"path"
 	"strconv"
 
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/your-username/forum/config"
@@ -12,7 +14,6 @@ import (
 	"github.com/your-username/forum/internal/model"
 	"github.com/your-username/forum/internal/pkg/minio"
 	"github.com/your-username/forum/internal/service"
-	"net/http"
 )
 
 func CreatePostHandler(c *gin.Context) {
