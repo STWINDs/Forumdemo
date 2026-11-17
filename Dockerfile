@@ -30,8 +30,8 @@ WORKDIR /root/
 
 # Copy the pre-built binary file from the previous stage
 COPY --from=builder /app/forum-app .
-# Copy config files
-COPY --from=builder /app/config/config.yaml ./config/
+# Runtime configuration is mounted read-only; never bake credentials into an image.
+RUN mkdir -p /root/config
 
 COPY --from=builder /app/web ./web
 

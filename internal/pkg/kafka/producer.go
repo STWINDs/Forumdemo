@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/segmentio/kafka-go"
 	"github.com/your-username/forum/config"
 	"github.com/your-username/forum/internal/middleware"
@@ -21,9 +22,10 @@ func Init(cfg *config.KafkaConfig) {
 		return
 	}
 	writer = &kafka.Writer{
-		Addr:     kafka.TCP(cfg.Address),
-		Topic:    cfg.Topic,
-		Balancer: &kafka.LeastBytes{},
+		Addr:         kafka.TCP(cfg.Address),
+		Topic:        cfg.Topic,
+		Balancer:     &kafka.LeastBytes{},
+		RequiredAcks: kafka.RequireAll,
 	}
 }
 
@@ -53,7 +55,7 @@ func SendEvent(ctx context.Context, key string, value interface{}) error {
 
 	if writer == nil {
 		zap.L().Error("kafka writer is nil, skip sending")
-		return nil
+		return errors.New("kafka producer unavailable")
 	}
 
 	err = writer.WriteMessages(ctx, msg)

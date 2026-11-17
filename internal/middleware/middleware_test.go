@@ -5,11 +5,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/your-username/forum/config"
 	"github.com/your-username/forum/internal/pkg/jwt"
 )
 
@@ -80,7 +80,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 
 	// High rate — all requests allowed
 	r := gin.New()
-	r.Use(RateLimitMiddleware(10*time.Millisecond, 100))
+	r.Use(RateLimitMiddleware(&config.RateLimitConfig{Enabled: true, Burst: 100, RPS: 100}))
 	r.GET("/api", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -94,7 +94,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 
 	// Tight limit — some requests should fail
 	r2 := gin.New()
-	r2.Use(RateLimitMiddleware(1*time.Second, 1))
+	r2.Use(RateLimitMiddleware(&config.RateLimitConfig{Enabled: true, Burst: 1, RPS: 1}))
 	r2.GET("/limited", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
@@ -110,6 +110,20 @@ func TestRateLimitMiddleware(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	r2.ServeHTTP(w2, req2)
 	assert.Equal(t, http.StatusTooManyRequests, w2.Code)
+}
+
+func TestRateLimitMiddlewareDisabled(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(RateLimitMiddleware(&config.RateLimitConfig{Enabled: false}))
+	r.GET("/unlimited", func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+	for i := 0; i < 1000; i++ {
+		req, _ := http.NewRequest(http.MethodGet, "/unlimited", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusNoContent, w.Code)
+	}
 }
 
 func TestTracingMiddleware(t *testing.T) {

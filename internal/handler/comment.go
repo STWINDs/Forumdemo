@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/your-username/forum/internal/middleware"
 	"github.com/your-username/forum/internal/model"
 	"github.com/your-username/forum/internal/service"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func CreateCommentHandler(c *gin.Context) {
@@ -21,11 +24,35 @@ func CreateCommentHandler(c *gin.Context) {
 		return
 	}
 	p.AuthorID = userID.(int64)
-	if err := service.CreateComment(p); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"msg": err.Error()})
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	defer cancel()
+	if err := service.SubmitComment(ctx, p); err != nil {
+		code := http.StatusServiceUnavailable
+		if errors.Is(err, service.ErrInvalidComment) {
+			code = http.StatusBadRequest
+		}
+		c.JSON(code, gin.H{"msg": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"msg": "success"})
+	c.JSON(http.StatusAccepted, model.CommentSubmission{State: "processing", Comment: p, Fingerprint: p.Fingerprint()})
+}
+
+func GetCommentSubmissionHandler(c *gin.Context) {
+	uid, ok := c.Get(middleware.ContextUserIDKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"msg": "user not logged in"})
+		return
+	}
+	result, err := service.GetCommentSubmissionForPayload(uid.(int64), c.Param("client_id"), c.Query("fingerprint"))
+	if err != nil {
+		code := http.StatusServiceUnavailable
+		if errors.Is(err, service.ErrInvalidComment) {
+			code = http.StatusBadRequest
+		}
+		c.JSON(code, gin.H{"msg": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 func GetCommentListHandler(c *gin.Context) {

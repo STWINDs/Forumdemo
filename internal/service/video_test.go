@@ -19,6 +19,9 @@ import (
 )
 
 func TestUploadVideo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires MinIO")
+	}
 	// 1. Setup Docker Minio client
 	c, err := minio.New("localhost:9000", &minio.Options{
 		Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),

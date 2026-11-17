@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 
@@ -19,6 +19,9 @@ import (
 // MySQL binlog → Canal → Kafka → Consumer → Redis cache invalidation
 // Uses real Docker Kafka and miniredis for Redis.
 func TestCanalPipelineE2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	// 1. Setup miniredis with pre-populated post cache
 	s, err := miniredis.Run()
 	if err != nil {
@@ -38,11 +41,11 @@ func TestCanalPipelineE2E(t *testing.T) {
 	// 2. Setup Kafka reader with unique group ID to avoid offset conflicts
 	groupID := fmt.Sprintf("canal-e2e-update-%d", time.Now().UnixNano())
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{"localhost:29092"},
-		Topic:     "canal-binlog",
-		GroupID:   groupID,
+		Brokers:     []string{"localhost:29092"},
+		Topic:       "canal-binlog",
+		GroupID:     groupID,
 		StartOffset: kafka.FirstOffset,
-		MaxWait:   15 * time.Second,
+		MaxWait:     15 * time.Second,
 	})
 	defer reader.Close()
 
@@ -89,6 +92,9 @@ func TestCanalPipelineE2E(t *testing.T) {
 // TestCanalInsertDoesNotInvalidate verifies that INSERT events don't trigger
 // cache invalidation (only UPDATE and DELETE should).
 func TestCanalInsertDoesNotInvalidate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	s, err := miniredis.Run()
 	if err != nil {
 		t.Fatal(err)
@@ -103,11 +109,11 @@ func TestCanalInsertDoesNotInvalidate(t *testing.T) {
 
 	groupID := fmt.Sprintf("canal-e2e-insert-%d", time.Now().UnixNano())
 	reader := kafka.NewReader(kafka.ReaderConfig{
-		Brokers:   []string{"localhost:29092"},
-		Topic:     "canal-binlog",
-		GroupID:   groupID,
+		Brokers:     []string{"localhost:29092"},
+		Topic:       "canal-binlog",
+		GroupID:     groupID,
 		StartOffset: kafka.FirstOffset,
-		MaxWait:   15 * time.Second,
+		MaxWait:     15 * time.Second,
 	})
 	defer reader.Close()
 

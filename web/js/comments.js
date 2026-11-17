@@ -1,4 +1,4 @@
-import { api } from './api.js';
+import { api, getCurrentUserID } from './api.js';
 import { el, escapeHtml, formatDate } from './utils.js';
 import { renderCommentVoteButtons } from './vote.js';
 
@@ -6,6 +6,89 @@ export async function renderComments(postId, containerEl, sort = 'hot') {
   containerEl.innerHTML = '';
 
   const refresh = (newSort) => renderComments(postId, containerEl, newSort || sort);
+	const pendingPanel = el('div');
+	containerEl.appendChild(pendingPanel);
+	const storageKey = `forum_pending_comments:${getCurrentUserID()}:${postId}`;
+	let pending = [];
+	try { pending = JSON.parse(sessionStorage.getItem(storageKey) || '[]'); } catch (_) { /* storage unavailable */ }
+	const save = () => { try { sessionStorage.setItem(storageKey, JSON.stringify(pending)); } catch (_) { /* retain in memory */ } };
+	const sameSubmission = (a, b) => a.client_comment_id === b.client_comment_id && a.fingerprint === b.fingerprint;
+	function showPending(comment) {
+	  const card = el('div', { className: 'comment-item' });
+	  card.appendChild(el('p', {}, comment.content));
+	  const state = el('span', {}, '处理中 · 仅自己可见');
+	  card.appendChild(state);
+	  pendingPanel.appendChild(card);
+	  function showFailed() {
+	    state.textContent = '发布失败，可重试';
+	    const retry = el('button', {type: 'button'}, '重试发布');
+	    retry.addEventListener('click', async () => {
+	      retry.disabled = true;
+	      comment.retry_id ||= newCommentRequestID();
+	      save();
+	      try {
+	        const receipt = await api.post('/comment', {
+	          post_id: comment.post_id, parent_id: comment.parent_id,
+	          content: comment.content, client_comment_id: comment.retry_id
+	        });
+	        onAccepted(receipt);
+	        pending = pending.filter(c => !sameSubmission(c, comment));
+	        save();
+	        card.remove();
+	      } catch (_) {
+	        state.textContent = '暂未确认重试结果，可再次重试';
+	      } finally {
+	        retry.disabled = false;
+	      }
+	    });
+	    card.appendChild(retry);
+	  }
+	  if (comment.failed) { showFailed(); return; }
+	  let attempts = 0;
+	  const poll = async () => {
+	    if (!card.isConnected) return;
+	    attempts += 1;
+	    try {
+	      const query = comment.fingerprint ? `?fingerprint=${encodeURIComponent(comment.fingerprint)}` : '';
+	      const receipt = await api.get(`/comments/submissions/${encodeURIComponent(comment.client_comment_id)}${query}`);
+	      if (!card.isConnected) return;
+	      if (receipt.state === 'failed') {
+	        comment.failed = true;
+	        save();
+	        showFailed();
+	        return;
+	      }
+	      if (receipt.state !== 'processing') {
+	        state.textContent = receipt.state === 'published' ? '已发布' : '该评论当前不可公开展示';
+	        pending = pending.filter(c => !sameSubmission(c, comment));
+	        save();
+	        if (receipt.state === 'published') {
+	          const link = el('button', {}, '刷新评论列表');
+	          link.addEventListener('click', () => refresh(sort));
+	          card.appendChild(link);
+	        }
+	        return;
+	      }
+	      if (attempts >= 10) state.textContent = '已受理，处理延迟 · 请勿重复发送';
+	    } catch (_) {
+	      state.textContent = '已受理，暂时无法确认进度 · 恢复后自动查询';
+	    }
+	    if (card.isConnected) setTimeout(poll, Math.min(30000, 2000 + attempts * 1000));
+	  };
+	  setTimeout(poll, 2000);
+	}
+	const onAccepted = (receipt) => {
+	  const entry = {...receipt.comment, fingerprint: receipt.fingerprint};
+	  if (!pending.some(c => sameSubmission(c, entry))) {
+	    pending.push(entry); save(); showPending(entry);
+	  }
+	};
+	for (const c of pending) showPending(c);
+	// Keep submission available even when the public list cannot be queried.
+	containerEl.appendChild(el('h3', {}, 'LEAVE A COMMENT'));
+	const topForm = el('div');
+	buildReplyForm(topForm, postId, 0, onAccepted);
+	containerEl.appendChild(topForm);
 
   try {
     const comments = await api.get(`/post/${postId}/comments?sort=${sort}`);
@@ -29,10 +112,6 @@ export async function renderComments(postId, containerEl, sort = 'hot') {
       const empty = el('div', { className: 'empty-state', style: 'padding:48px 0;margin:16px 0' });
       empty.appendChild(el('p', {}, 'NOTHING HERE'));
       containerEl.appendChild(empty);
-      containerEl.appendChild(el('h3', {}, 'LEAVE A COMMENT'));
-      const topForm = el('div');
-      buildReplyForm(topForm, postId, 0, () => refresh(sort));
-      containerEl.appendChild(topForm);
       return;
     }
 
@@ -80,7 +159,7 @@ export async function renderComments(postId, containerEl, sort = 'hot') {
         if (replyForm.style.display === 'none') {
           replyForm.style.display = 'block';
           replyForm.innerHTML = '';
-          buildReplyForm(replyForm, postId, comment.id, () => refresh(sort));
+          buildReplyForm(replyForm, postId, comment.id, onAccepted);
         } else {
           replyForm.style.display = 'none';
           replyForm.innerHTML = '';
@@ -99,17 +178,18 @@ export async function renderComments(postId, containerEl, sort = 'hot') {
       containerEl.appendChild(renderComment(root, 0));
     }
 
-    containerEl.appendChild(el('h3', {}, 'LEAVE A COMMENT'));
-    const topForm = el('div');
-    buildReplyForm(topForm, postId, 0, () => refresh(sort));
-    containerEl.appendChild(topForm);
-
   } catch (err) {
     containerEl.appendChild(el('div', { className: 'error-msg' }, `[ERROR] ${escapeHtml(err.message)}`));
   }
 }
 
+function newCommentRequestID() {
+  return crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, '0')).join('');
+}
+
 function buildReplyForm(container, postId, parentId, onCommentAdded) {
+	let requestID = null;
+	let requestContent = null;
   const errorDiv = el('div', { className: 'error-msg' });
   const successDiv = el('div', { className: 'success-msg' });
   const textarea = el('textarea', { rows: '3' });
@@ -128,12 +208,20 @@ function buildReplyForm(container, postId, parentId, onCommentAdded) {
     }
     errorDiv.textContent = '';
     successDiv.textContent = '';
+	if (requestContent !== content || !requestID) {
+	  requestID = newCommentRequestID();
+	  requestContent = content;
+	}
+	submitBtn.disabled = true;
     try {
-      await api.post('/comment', { content, post_id: parseInt(postId), parent_id: parseInt(parentId) });
-      successDiv.textContent = '[POSTED]';
-      setTimeout(() => onCommentAdded(), 500);
+	  const receipt = await api.post('/comment', { content, post_id: parseInt(postId), parent_id: parseInt(parentId), client_comment_id: requestID });
+	  onCommentAdded(receipt);
+	  successDiv.textContent = '已受理 · 正在处理';
+	  textarea.value = ''; requestID = null; requestContent = null;
     } catch (err) {
       errorDiv.textContent = `[ERROR] ${err.message}`;
+	} finally {
+	  submitBtn.disabled = false;
     }
   });
 }

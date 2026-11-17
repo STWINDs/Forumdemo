@@ -1,0 +1,99 @@
+name: Publish application image
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# 每次提交的镜像独立保存，较新的提交不取消正在进行的构建。
+concurrency:
+  group: publish-image-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify before publishing
+    uses: ./.github/workflows/verify.yml
+
+  publish:
+    name: Build and push candidate image
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+      DOCKERHUB_REPOSITORY: ${{ vars.DOCKERHUB_REPOSITORY }}
+      IMAGE_PLATFORM: ${{ vars.IMAGE_PLATFORM }}
+    steps:
+      - name: Check repository settings
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for setting in DOCKERHUB_USERNAME DOCKERHUB_REPOSITORY IMAGE_PLATFORM DOCKERHUB_TOKEN; do
+            if [[ -z "${!setting}" ]]; then
+              echo "::error::Missing Actions setting: ${setting} (see doc/CICD协作改造方案.md)"
+              exit 1
+            fi
+          done
+          if [[ ! "$DOCKERHUB_REPOSITORY" =~ ^[a-z0-9]+([._-][a-z0-9]+)*/[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "::error::DOCKERHUB_REPOSITORY must be namespace/repository in lowercase"
+            exit 1
+          fi
+          case "$IMAGE_PLATFORM" in
+            linux/amd64|linux/arm64) ;;
+            *) echo "::error::IMAGE_PLATFORM must be linux/amd64 or linux/arm64"; exit 1 ;;
+          esac
+
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # verify 的任一步失败或取消，publish 不会运行。
+      - name: Build and push candidate
+        id: image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.IMAGE_PLATFORM }}
+          push: true
+          tags: ${{ env.DOCKERHUB_REPOSITORY }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Record version for manual deployment
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf '## Candidate image\n\n'
+            printf 'Commit: `%s`\n\n' "$GITHUB_SHA"
+            printf 'Tag: `%s:sha-%s`\n\n' "$DOCKERHUB_REPOSITORY" "$GITHUB_SHA"
+            printf 'Deploy reference: `%s@%s`\n\n' "$DOCKERHUB_REPOSITORY" "$IMAGE_DIGEST"
+            printf 'Platform: `%s`\n\n' "$IMAGE_PLATFORM"
+            printf 'Existing unit and integration suites passed. Manual production deployment is pending implementation.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

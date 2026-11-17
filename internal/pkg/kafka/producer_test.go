@@ -9,6 +9,9 @@ import (
 )
 
 func TestSendEvent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	// Connect to real Kafka in Docker (host-accessible port)
 	writer := &kafka.Writer{
 		Addr:                   kafka.TCP("localhost:29092"),
@@ -30,14 +33,15 @@ func TestSendEvent(t *testing.T) {
 func TestSendEvent_NilWriter(t *testing.T) {
 	SetWriter(nil)
 
-	// Should not panic, just return nil
-	// (Previous hack: "return nil if writer is nil" was removed, now it returns after logging)
-	// The current code checks writer == nil and returns nil
+	// Unavailable delivery must not be reported as accepted.
 	err := SendEvent(context.Background(), "key", "value")
-	assert.Nil(t, err)
+	assert.Error(t, err)
 }
 
 func TestSendEvent_MultipleMessages(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires Kafka")
+	}
 	writer := &kafka.Writer{
 		Addr:                   kafka.TCP("localhost:29092"),
 		Topic:                  "forum-test-events",

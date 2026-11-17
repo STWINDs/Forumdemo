@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -23,25 +24,47 @@ func TestAllow_WithinCapacity(t *testing.T) {
 }
 
 func TestAllow_Refill(t *testing.T) {
-	b := NewTokenBucket(3, 100) // 100 tokens/sec
+	now := time.Unix(100, 0)
+	b := NewTokenBucketWithClock(10, 5, func() time.Time { return now })
 
 	// Exhaust tokens
-	b.Allow()
-	b.Allow()
-	b.Allow()
+	for i := 0; i < 10; i++ {
+		assert.True(t, b.Allow())
+	}
 	assert.False(t, b.Allow(), "bucket should be empty")
 
-	// Wait for refill
-	time.Sleep(20 * time.Millisecond)
-	assert.True(t, b.Allow(), "should refill after wait")
+	now = now.Add(time.Second)
+	for i := 0; i < 5; i++ {
+		assert.True(t, b.Allow(), "exactly five tokens should refill in one second")
+	}
+	assert.False(t, b.Allow())
 }
 
 func TestAllow_CapacityLimit(t *testing.T) {
-	b := NewTokenBucket(2, 1)
+	now := time.Unix(100, 0)
+	b := NewTokenBucketWithClock(2, 1, func() time.Time { return now })
 
-	// Wait long enough that refill would exceed capacity
-	time.Sleep(10 * time.Millisecond)
+	now = now.Add(time.Hour)
 	assert.True(t, b.Allow())
 	assert.True(t, b.Allow())
 	assert.False(t, b.Allow(), "should not exceed capacity")
+}
+
+func TestAllow_ConcurrentNeverExceedsBurst(t *testing.T) {
+	now := time.Unix(100, 0)
+	b := NewTokenBucketWithClock(10, 5, func() time.Time { return now })
+
+	var wg sync.WaitGroup
+	allowed := make(chan struct{}, 1000)
+	for i := 0; i < 1000; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if b.Allow() {
+				allowed <- struct{}{}
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Len(t, allowed, 10)
 }

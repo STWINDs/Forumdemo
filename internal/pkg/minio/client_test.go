@@ -24,6 +24,9 @@ func setupMinioClient(t *testing.T) {
 }
 
 func TestInit(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires MinIO")
+	}
 	cfg := &config.MinioConfig{
 		Endpoint:        "localhost:9000",
 		AccessKeyID:     "minioadmin",
@@ -39,6 +42,9 @@ func TestInit(t *testing.T) {
 }
 
 func TestUploadAndDeleteFile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires MinIO")
+	}
 	setupMinioClient(t)
 
 	ctx := context.Background()
@@ -66,6 +72,9 @@ func TestUploadAndDeleteFile(t *testing.T) {
 }
 
 func TestGetPresignedURL(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration: requires MinIO")
+	}
 	setupMinioClient(t)
 
 	ctx := context.Background()

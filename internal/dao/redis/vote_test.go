@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -31,7 +31,7 @@ func TestVoteForPost_Toggle(t *testing.T) {
 	dir, err := VoteForPost(userID, postID, 1)
 	assert.Nil(t, err)
 	assert.Equal(t, float64(1), dir)
-	voted, _ := s.ZScore(KeyPostVotedPrefix+postID, userID)
+	voted, _ := s.ZScore(PostVotedKey(postID), userID)
 	assert.Equal(t, float64(1), voted)
 
 	up, down, _ := GetPostVoteCounts(postID)
@@ -51,7 +51,7 @@ func TestVoteForPost_Toggle(t *testing.T) {
 	dir, err = VoteForPost(userID, postID, -1)
 	assert.Nil(t, err)
 	assert.Equal(t, float64(-1), dir)
-	voted, _ = s.ZScore(KeyPostVotedPrefix+postID, userID)
+	voted, _ = s.ZScore(PostVotedKey(postID), userID)
 	assert.Equal(t, float64(-1), voted)
 
 	up, down, _ = GetPostVoteCounts(postID)
@@ -77,7 +77,7 @@ func TestVoteForComment_Toggle(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, float64(1), dir)
 
-	voted, _ := s.ZScore(KeyCommentVotedPrefix+commentID, userID)
+	voted, _ := s.ZScore(CommentVotedKey(commentID), userID)
 	assert.Equal(t, float64(1), voted)
 
 	// Flip to downvote
@@ -97,7 +97,7 @@ func TestGetPostVoteCounts(t *testing.T) {
 	initResilience()
 
 	// Seed vote counts
-	rdb.HMSet(ctx, KeyPostVoteHash+"100", "up", 5, "down", 2)
+	rdb.HMSet(ctx, PostVoteCountKey("100"), "up", 5, "down", 2)
 
 	up, down, err := GetPostVoteCounts("100")
 	assert.Nil(t, err)
@@ -115,8 +115,8 @@ func TestBatchVoteCounts(t *testing.T) {
 	rdb = redis.NewClient(&redis.Options{Addr: s.Addr()})
 	initResilience()
 
-	rdb.HMSet(ctx, KeyPostVoteHash+"1", "up", 10, "down", 3)
-	rdb.HMSet(ctx, KeyPostVoteHash+"2", "up", 0, "down", 1)
+	rdb.HMSet(ctx, PostVoteCountKey("1"), "up", 10, "down", 3)
+	rdb.HMSet(ctx, PostVoteCountKey("2"), "up", 0, "down", 1)
 
 	counts, err := PipelineGetPostVoteCounts([]int64{1, 2})
 	assert.Nil(t, err)
